@@ -6,6 +6,7 @@ module.exports = {
     "libraries",
     "interfaces",
     "HEZToken.sol",
-    "BootstrapDistribution.sol"
+    "BootstrapDistribution.sol",
+    "auxiliary"
   ],
 };

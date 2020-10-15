@@ -45,12 +45,6 @@ module.exports = {
       blockGasLimit: 12000000,
       gas: 12000000,
       allowUnlimitedContractSize: true,
-      accounts: {
-        mnemonic: process.env.MNEMONIC || DEFAULT_MNEMONIC,
-        path: "m/44'/60'/0'/0",
-        initialIndex: 0,
-        count: 20,
-      },
     },
     ropsten: {
       url: `https://ropsten.infura.io/v3/${process.env.INFURA_PROJECT_ID}`,

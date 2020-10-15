@@ -73,14 +73,13 @@ describe("HEZ", function() {
     await vestingVault2.deployed();
     console.log("Vesting Stakeholders (2):\t", vestingVault2.address);
 
-    // Vesting Exchanges
     let vestingVault3 = await vestingVaultFactory.deploy(
       tokenAddress,
       bootstrapAddress,
       true
     );
     await vestingVault3.deployed();
-    console.log("Vesting Exchanges (3):\t\t", vestingVault3.address);
+    console.log("Vesting (3):\t\t", vestingVault3.address);
 
     // Bootstrap Distribution
     let bootstrapDistributionFactory = await ethers.getContractFactory("BootstrapDistribution");

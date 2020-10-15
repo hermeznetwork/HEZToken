@@ -19,9 +19,11 @@ contract HermezVesting {
     uint256 public endTime;
     uint256 public initialPercentage;
 
-    address public constant HEZ = address(
+    /*address public constant HEZ = address(
         0xEEF9f339514298C6A857EfCfC1A762aF84438dEE
-    );
+    );*/
+
+    address public HEZ;
 
     event Withdraw(address indexed recipient, uint256 amount);
     event Move(address indexed from, address indexed to, uint256 value);
@@ -33,7 +35,8 @@ contract HermezVesting {
         uint256 _startTime,
         uint256 _startToCliff,
         uint256 _startToEnd,
-        uint256 _initialPercentage
+        uint256 _initialPercentage,
+        address token
     ) public {
         require(
             _startToEnd >= _startToCliff,
@@ -43,6 +46,7 @@ contract HermezVesting {
             _initialPercentage <= 100,
             "HermezVesting::constructor: INITIALPERCENTAGE_GREATER_THAN_100"
         );
+        HEZ = token;
         distributor = _distributor;
         totalVestedTokens = _totalVestedTokens;
         vestedTokens[_distributor] = _totalVestedTokens;
@@ -76,7 +80,7 @@ contract HermezVesting {
         view
         returns (uint256)
     {
-        return withdrawableTokensAt(recipient, block.timestamp);
+        return withdrawableTokensAt(recipient, getTimestamp());
     }
 
     function withdrawableTokensAt(address recipient, uint256 timestamp)
@@ -98,7 +102,7 @@ contract HermezVesting {
 
         uint256 remainingToWithdraw = withdrawableTokensAt(
             msg.sender,
-            block.timestamp
+            getTimestamp()
         );
 
         withdrawed[msg.sender] = withdrawed[msg.sender].add(
@@ -122,6 +126,10 @@ contract HermezVesting {
         vestedTokens[recipient] = vestedTokens[recipient].add(amount);
         emit Move(msg.sender, recipient, amount);
     }
+
+    function getTimestamp() public view virtual returns (uint256){
+        return block.timestamp;
+    } 
 
     function changeAddress(address newAddress) external {
         require(

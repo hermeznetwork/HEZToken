@@ -45,8 +45,37 @@ describe("VestingVault revocable", function () {
     tokenFactory = await ethers.getContractFactory("HEZ");
     token = await tokenFactory.deploy(multisigAddress);
     await token.deployed();
-    HermezVestingFactory = await ethers.getContractFactory("HermezVesting");
+    HermezVestingFactory = await ethers.getContractFactory("HermezVestingMock");
   });
+
+  it("should check the constructor", async () => {
+    const amount = ethers.utils.parseEther("20000000");
+    const offset = 90 * (3600 * 24);
+    const startTime = (await ethers.provider.getBlock()).timestamp;
+    const startToCliff = 180 * (3600 * 24);
+    const startToEnd = 730 * (3600 * 24);
+    const initialPercentage = 5;
+
+    await expect(HermezVestingFactory.deploy(
+      multisigAddress,
+      amount,
+      startTime,
+      startToEnd,
+      startToCliff,
+      initialPercentage,
+      token.address
+    )).to.be.revertedWith("HermezVesting::constructor: START_GREATER_THAN_CLIFF");
+
+    await expect(HermezVestingFactory.deploy(
+      multisigAddress,
+      amount,
+      startTime,
+      startToCliff,
+      startToEnd,
+      initialPercentage + 100,
+      token.address
+    )).to.be.revertedWith("HermezVesting::constructor: INITIALPERCENTAGE_GREATER_THAN_100");
+  })
 
   it("should deploy the HermezVesting", async () => {
     const amount = ethers.utils.parseEther("20000000");
@@ -62,7 +91,8 @@ describe("VestingVault revocable", function () {
       startTime,
       startToCliff,
       startToEnd,
-      initialPercentage
+      initialPercentage,
+      token.address
     );
 
     let initialAmount = amount.mul(initialPercentage).div(100);
@@ -121,12 +151,15 @@ describe("VestingVault revocable", function () {
       startTime,
       startToCliff,
       startToEnd,
-      initialPercentage
+      initialPercentage,
+      token.address
     );
     let amountRecipient1 = amount.div(2);
     let amountRecipient2 = amountRecipient1.div(2);
     let amountRecipient3 = amountRecipient2.div(2);
     let amountRecipient4 = amountRecipient3.div(2);
+
+    await expect(hermezVesting.connect(recipient1).move(recipientAddress1, amountRecipient1)).to.be.revertedWith("HermezVesting::changeAddress: ONLY_DISTRIBUTOR");
 
     await expect(hermezVesting.move(recipientAddress1, amountRecipient1))
       .to.emit(hermezVesting, "Move")
@@ -169,7 +202,8 @@ describe("VestingVault revocable", function () {
       startTime,
       startToCliff,
       startToEnd,
-      initialPercentage
+      initialPercentage,
+      token.address
     );
 
     let amountRecipient1 = amount.div(2);
@@ -263,7 +297,8 @@ describe("VestingVault revocable", function () {
       startTime,
       startToCliff,
       startToEnd,
-      initialPercentage
+      initialPercentage,
+      token.address
     );
 
     await token.transfer(hermezVesting.address, amount);
@@ -278,25 +313,36 @@ describe("VestingVault revocable", function () {
     hermezVesting.move(recipientAddress3, amountRecipient3);
     hermezVesting.move(recipientAddress4, amountRecipient4);
 
-    let nowTimestamp = (await ethers.provider.getBlock()).timestamp + 1;
+    let nowTimestamp = now;
+    await hermezVesting.setTimestamp(nowTimestamp);
+    await expect(await hermezVesting.getTimestamp()).to.be.equal(now);
+
     let withdrawableTokensAtRecipient1 = await hermezVesting.withdrawableTokensAt(
       recipientAddress1,
       nowTimestamp
     );
+
+    await expect(hermezVesting.withdraw()).to.be.revertedWith("HermezVesting::withdraw: DISTRIBUTOR_CANNOT_WITHDRAW");
+
     await expect(hermezVesting.connect(recipient1).withdraw())
       .to.emit(hermezVesting, "Withdraw")
       .withArgs(recipientAddress1, withdrawableTokensAtRecipient1);
 
-    nowTimestamp = (await ethers.provider.getBlock()).timestamp + 1;
     let withdrawableTokensAtRecipient2 = await hermezVesting.withdrawableTokensAt(
       recipientAddress2,
       nowTimestamp
     );
+    expect(await hermezVesting.withdrawableTokensAt(
+      recipientAddress2,
+      nowTimestamp
+    )).to.be.equal(await hermezVesting.withdrawableTokens(
+      recipientAddress2
+    ));
+
     await expect(hermezVesting.connect(recipient2).withdraw())
       .to.emit(hermezVesting, "Withdraw")
       .withArgs(recipientAddress2, withdrawableTokensAtRecipient2);
 
-    nowTimestamp = (await ethers.provider.getBlock()).timestamp + 1;
     let withdrawableTokensAtRecipient3 = await hermezVesting.withdrawableTokensAt(
       recipientAddress3,
       nowTimestamp
@@ -305,7 +351,6 @@ describe("VestingVault revocable", function () {
       .to.emit(hermezVesting, "Withdraw")
       .withArgs(recipientAddress3, withdrawableTokensAtRecipient3);
 
-    nowTimestamp = (await ethers.provider.getBlock()).timestamp + 1;
     let withdrawableTokensAtRecipient4 = await hermezVesting.withdrawableTokensAt(
       recipientAddress4,
       nowTimestamp
@@ -314,4 +359,101 @@ describe("VestingVault revocable", function () {
       .to.emit(hermezVesting, "Withdraw")
       .withArgs(recipientAddress4, withdrawableTokensAtRecipient4);
   });
+  it("should be able to change the address", async () => {
+    const amount = ethers.utils.parseEther("20000000");
+    const now = (await ethers.provider.getBlock()).timestamp;
+    const offset = 365 * (3600 * 24);
+    const startTime = now - offset;
+    const startToCliff = 180 * (3600 * 24);
+    const startToEnd = 730 * (3600 * 24);
+    const initialPercentage = 5;
+
+    let hermezVesting = await HermezVestingFactory.deploy(
+      multisigAddress,
+      amount,
+      startTime,
+      startToCliff,
+      startToEnd,
+      initialPercentage,
+      token.address
+    );
+    await token.transfer(hermezVesting.address, amount);
+
+    let amountRecipient1 = amount.div(2);
+    await hermezVesting.move(recipientAddress1, amountRecipient1);
+    await hermezVesting.connect(recipient1).withdraw();
+    let withdrawed = await hermezVesting.withdrawed(recipientAddress1);
+    let totalVested = await hermezVesting.vestedTokens(recipientAddress1);
+    await expect(hermezVesting.connect(recipient1).changeAddress(recipientAddress2)).to.emit(hermezVesting,"ChangeAddress").withArgs(recipientAddress1,recipientAddress2);
+    expect(await hermezVesting.withdrawed(recipientAddress1)).to.be.equal(0);
+    expect(await hermezVesting.vestedTokens(recipientAddress1)).to.be.equal(0);
+    expect(await hermezVesting.withdrawed(recipientAddress2)).to.be.equal(withdrawed);
+    expect(await hermezVesting.vestedTokens(recipientAddress2)).to.be.equal(totalVested);
+  })
+
+  it("should be able to change the address if it's the distributor", async () => {
+    const amount = ethers.utils.parseEther("20000000");
+    const now = (await ethers.provider.getBlock()).timestamp;
+    const offset = 365 * (3600 * 24);
+    const startTime = now - offset;
+    const startToCliff = 180 * (3600 * 24);
+    const startToEnd = 730 * (3600 * 24);
+    const initialPercentage = 5;
+
+    let hermezVesting = await HermezVestingFactory.deploy(
+      multisigAddress,
+      amount,
+      startTime,
+      startToCliff,
+      startToEnd,
+      initialPercentage,
+      token.address
+    );
+    await token.transfer(hermezVesting.address, amount);
+
+    let amountRecipient1 = amount.div(2);
+    let amountRecipient2 = amountRecipient1.div(2);
+    let amountRecipient3 = amountRecipient2.div(2);
+    let amountRecipient4 = amountRecipient3.div(2);
+
+    await hermezVesting.move(recipientAddress1, amountRecipient1);
+    await hermezVesting.move(recipientAddress3, amountRecipient3);
+
+    await hermezVesting.connect(recipient1).withdraw();
+    let previousDistributor = await hermezVesting.vestedTokens(multisigAddress);
+    await expect(hermezVesting.connect(recipient1).changeAddress(recipientAddress3)).to.be.revertedWith("HermezVesting::changeAddress: ADDRESS_HAS_BALANCE");
+    await expect(hermezVesting.changeAddress(recipientAddress1)).to.be.revertedWith("HermezVesting::changeAddress: ADDRESS_HAS_BALANCE");
+    await expect(hermezVesting.changeAddress(recipientAddress2)).to.emit(hermezVesting,"ChangeAddress").withArgs(multisigAddress,recipientAddress2);
+    expect(await hermezVesting.vestedTokens(recipientAddress2)).to.be.equal(previousDistributor);
+    expect(await hermezVesting.vestedTokens(multisigAddress)).to.be.equal(0);
+  })
+  
+  it("shouldn't be able to change to the distributor address when distributor balance is 0", async () => {
+    const amount = ethers.utils.parseEther("20000000");
+    const now = (await ethers.provider.getBlock()).timestamp;
+    const offset = 365 * (3600 * 24);
+    const startTime = now - offset;
+    const startToCliff = 180 * (3600 * 24);
+    const startToEnd = 730 * (3600 * 24);
+    const initialPercentage = 5;
+
+    let hermezVesting = await HermezVestingFactory.deploy(
+      multisigAddress,
+      amount,
+      startTime,
+      startToCliff,
+      startToEnd,
+      initialPercentage,
+      token.address
+    );
+    await token.transfer(hermezVesting.address, amount);
+
+    let amountRecipient1 = amount.div(2);
+    await hermezVesting.move(recipientAddress1, amountRecipient1);
+    await hermezVesting.move(recipientAddress2, amount.sub(amountRecipient1));
+    expect(await hermezVesting.vestedTokens(multisigAddress)).to.be.equal(0);
+    await hermezVesting.connect(recipient1).withdraw();
+    await expect(hermezVesting.connect(recipient1).changeAddress(multisigAddress)).to.be.revertedWith("HermezVesting::changeAddress: DISTRIBUTOR_NOT_ALLOWED");
+  })
+
 });
