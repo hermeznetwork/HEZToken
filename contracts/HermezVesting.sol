@@ -132,6 +132,10 @@ contract HermezVesting {
             withdrawed[newAddress] == 0,
             "HermezVesting::changeAddress: ADDRESS_ALREADY_WITHDRAWED"
         );
+        require(
+            newAddress != distributor,
+            "HermezVesting::changeAddress: DISTRIBUTOR_NOT_ALLOWED"
+        );
 
         vestedTokens[newAddress] = vestedTokens[msg.sender];
         vestedTokens[msg.sender] = 0;
